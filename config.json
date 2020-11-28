@@ -1,0 +1,9 @@
+{
+    "port": "8080",
+    "period": 10,
+    "redisAddr": "localhost",
+    "redisPort": "7001",
+    "redisDB": "0",
+    "redisPassword": "passw0rd",
+    "logPath": "./log"
+}
