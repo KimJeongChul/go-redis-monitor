@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Redis Monitor</title>
+    <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" name="viewport">
+    <script src="/js/jquery.min.js"></script>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/css/main.css" style="background-color:darksalmon">
+</head>
+
+<body>
+    <script type="text/javascript">
+        var r = function () { return Math.floor(Math.random()*256) };
+
+        let today = new Date();
+
+        /* 10 Seconds Label tick*/
+        var labelTimes = [];
+            setInterval(function() {
+                let now = new Date();
+                labelTimes.push(now.getHours() + ":" + now.getMinutes() +":"+now.getSeconds()); // 
+                if (labelTimes.length > 60) {
+                    labelTimes.shift();
+                } 
+            }, 1000 * 10);
+
+        // SSE Event 등록
+        let eventListener = new EventSource("http://localhost:8080/listen/")
+        eventListener.onmessage = (event) => {
+            let { type, data } = event
+            console.log(event);
+            parsedMsg = JSON.parse(data);
+            console.log(parsedMsg);
+            switch (parsedMsg.method) {
+                case "updateRedisInfo":
+                    {
+                        const connectedClient = parsedMsg.connectedClient;
+                        const usedMmory = parsedMsg.usedMmory;
+                        const usedMemoryPeak = parsedMsg.usedMemoryPeak;
+                        const instantaneousOpsPerSec = parsedMsg.instantaneousOpsPerSec;
+                        const tx = parsedMsg.tx;
+                        var isExistGraph = false;
+
+                        // Connected Client Graph
+                        configConnectedClientGraph.data.datasets.forEach(function(dataset) {
+                            if(dataset.label === "Total Connections"){
+                                dataset.data.push(connectedClient);
+                                if (dataset.data.length > 60){
+                                    dataset.data.shift();
+                                }
+                                isExistGraph = true;
+                            }
+                        });
+
+                        configResourceMemoryGraph.data.datasets.forEach(function(dataset) {
+                            if(dataset.label === "Used Memory"){
+                                dataset.data.push(usedMmory);
+                                if(dataset.data.length > 60){
+                                    dataset.data.shift();
+                                }
+                            } else if(dataset.label == "Used Memory Peak"){
+                                dataset.data.push(usedMemoryPeak);
+                                if(dataset.data.length > 60){
+                                    dataset.data.shift();
+                                }
+                            }
+                        });
+
+                        configTotalCommandsProcessedGraph.data.datasets.forEach(function(dataset) {
+                            if(dataset.label === "Total Commands Processed"){
+                                dataset.data.push(instantaneousOpsPerSec);
+                                if(dataset.data.length > 60){
+                                    dataset.data.shift();
+                                }
+                            }
+
+                        })
+
+                        // Initialize
+                        if(!isExistGraph) {
+                            configConnectedClientGraph.data.datasets.push({
+                                label: "Total Connections",
+                                data: [connectedClient],
+                                borderColor: "rgb(102, 102, 255)",
+                                fill: false,
+                                lineTension: 0.1
+                            });
+                            configResourceMemoryGraph.data.datasets.push({
+                                label: "Used Memory",
+                                data: [usedMmory],
+                                borderColor: "rgb(233, 150, 122)",
+                                fill: false,
+                                lineTension: 0.1
+                            });
+                            configResourceMemoryGraph.data.datasets.push({
+                                label: "Used Memory Peak",
+                                data: [usedMemoryPeak],
+                                borderColor: "rgb(178, 34, 34)",
+                                fill: false,
+                                lineTension: 0.1
+                            });
+                            configTotalCommandsProcessedGraph.data.datasets.push({
+                                label: "Total Commands Processed",
+                                data: [instantaneousOpsPerSec],
+                                borderColor: "rgb(178, 34, 34)",
+                                fill: false,
+                                lineTension: 0.1
+                            })
+                        }
+                        
+                        connectedClientChart.update();
+                        resourceMemoryChart.update();
+                        totalCommandsProcessedChart.update();
+                    }
+                    break;
+            }
+        }
+    </script>
+    <div class="wrapper" style="background-color: white;">
+        <div class="content-wrapper" id="pjax-container" style="margin-left:0px;">
+            <script src="/js/chart.min.js"></script>
+
+            <section class="content-header">
+                <center>
+                <h1 class="header-title">
+                    Redis Montior
+                    <img src="/resource/redis-icon.png" style="width: 10%;">
+                </h1>
+                <h4><a href="https://github.com/KimJeongChul/go-redis-monitor">KimJeongChul/go-redis-monitor</a></h4>
+                </center>
+                <ol class="breadcrumb">
+                    <li>Dashboard</li>
+                </ol>
+            </section>
+            <section class="content">
+                <div>
+                    <div class="row">
+                        <!-- Connected Client Graph -->
+                        <div class="col-md-6 ">
+                            <div class="box box-">
+                                <div class="box-body" style="overflow-x: scroll;overflow-y: hidden;">
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <p class="text-center">
+                                                <strong id="reportTitle">Connected Client (Recent 10 minutes)</strong>
+                                            </p>
+                                            <div class="chart">
+                                                <canvas id="connectedClientGraph"></canvas>
+                                            </div>
+                                            <script>
+                                                var ctxConnectedClientGraph = document.getElementById('connectedClientGraph').getContext('2d');
+                                                var configConnectedClientGraph = {
+                                                    type: "line",
+                                                    data: {
+                                                        labels: labelTimes,
+                                                        datasets: []
+                                                    }
+                                                };
+                                                var connectedClientChart = new Chart(ctxConnectedClientGraph, configConnectedClientGraph);                                                 
+                                                
+                                                setInterval(function() {
+                                                    connectedClientChart.update();
+                                                }, 1000);
+                                            </script>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Memory Graph -->
+                        <div class="col-md-6 ">
+                            <div class="box box-">
+                                <div class="box-body" style="overflow-x: scroll;overflow-y: hidden;">
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <p class="text-center">
+                                                <strong id="reportTitle">Memory usages graph (Recent 10 minutes)</strong>
+                                            </p>
+                                            <div class="chart">
+                                                <canvas id="resourceMemoryGraph"></canvas>
+                                            </div>
+                                            <script>
+                                                var ctxResourceMemoryGraph = document.getElementById('resourceMemoryGraph').getContext('2d');
+                                                var configResourceMemoryGraph = {
+                                                    type: "line",
+                                                    data: {
+                                                        labels: labelTimes,
+                                                        datasets: []
+                                                    }
+                                                };
+                                                var resourceMemoryChart = new Chart(ctxResourceMemoryGraph, configResourceMemoryGraph);                                                 
+                                                setInterval(function() {
+                                                    resourceMemoryChart.update();
+                                                }, 1000);
+                                            </script>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                     <div class="row">
+                        <!-- Total Commands Processed graph -->
+                        <div class="col-md-6 ">
+                            <div class="box box-">
+                                <div class="box-body" style="overflow-x: scroll;overflow-y: hidden;">
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <p class="text-center">
+                                                <strong id="reportTitle">Total Commands Processed graph (Recent 10 minutes)</strong>
+                                            </p>
+                                            <div class="chart">
+                                                <canvas id="totalCommandsProcessed"></canvas>
+                                            </div>
+                                            <script>
+                                                var ctxTotalCommandsProcessedGraph = document.getElementById('totalCommandsProcessed').getContext('2d');
+                                                var configTotalCommandsProcessedGraph = {
+                                                    type: "line",
+                                                    data: {
+                                                        labels: labelTimes,
+                                                        datasets: []
+                                                    }
+                                                };
+                                                var totalCommandsProcessedChart = new Chart(ctxTotalCommandsProcessedGraph, configTotalCommandsProcessedGraph);                                                 
+                                                
+                                                setInterval(function() {
+                                                    totalCommandsProcessedChart.update();
+                                                }, 1000);
+                                            </script>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 전체 노드별 메모리 자원 사용량 그래프 -->
+                        <div class="col-md-6 ">
+                            <div class="box box-">
+                                <div class="box-body" style="overflow-x: scroll;overflow-y: hidden;">
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <p class="text-center">
+                                                <strong id="reportTitle">Network Resource usages graph (Recent 10 minutes)</strong>
+                                            </p>
+                                            <div class="chart">
+                                                <canvas id="resourceNetworkGraph"></canvas>
+                                            </div>
+                                            <script>
+                                                var ctxResourceNetworkGraph = document.getElementById('resourceNetworkGraph').getContext('2d');
+                                                var configResourceNetworkGraph = {
+                                                    type: "line",
+                                                    data: {
+                                                        labels: labelTimes,
+                                                        datasets: []
+                                                    }
+                                                };
+                                                var resourceNetworkChart = new Chart(ctxResourceNetworkGraph, configResourceNetworkGraph);                                                 
+                                                setInterval(function() {
+                                                    resourceNetworkChart.update();
+                                                }, 1000);
+                                            </script>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+</body>
+</html>
