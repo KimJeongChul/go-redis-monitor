@@ -1,9 +1,11 @@
 package redis
 
 import (
-	"fmt"
+	"encoding/json"
+	"strconv"
 	"time"
 
+	"github.com/KimJeongChul/go-redis-monitor/broker"
 	cerror "github.com/KimJeongChul/go-redis-monitor/error"
 	"github.com/KimJeongChul/go-redis-monitor/logger"
 )
@@ -12,16 +14,18 @@ const packageName = "redis"
 
 // RedisProfiler Redis server db stat
 type RedisProfiler struct {
-	period      int              // 프로파일링 주기
-	redisClient *RedisClient     // Redis 클라이언트
+	period      int
+	redisClient *RedisClient     // Redis client
 	parser      *RedisInfoParser // Redis Info Parser
+	broker      *broker.Broker
 }
 
 // NewRedisProfiler Create new RedisProfiler
-func NewRedisProfiler(period int, redisClient *RedisClient) *RedisProfiler {
+func NewRedisProfiler(period int, redisClient *RedisClient, broker *broker.Broker) *RedisProfiler {
 	rp := &RedisProfiler{
 		period:      period,
 		redisClient: redisClient,
+		broker:      broker,
 	}
 	rp.parser = &RedisInfoParser{}
 	return rp
@@ -45,19 +49,65 @@ func (rp RedisProfiler) Start() {
 				}
 			}
 
-			fmt.Printf("# Parse result: \n")
-			fmt.Printf("# Server: %+v\n", &redisInfo.Server)
-			fmt.Printf("# Clients: %+v\n", &redisInfo.Clients)
-			fmt.Printf("# Memory: %+v\n", &redisInfo.Memory)
-			fmt.Printf("# Persistance: %+v\n", &redisInfo.Persistence)
-			fmt.Printf("# Stats: %+v\n", &redisInfo.Stats)
-			fmt.Printf("# Replication: %+v\n", &redisInfo.Replication)
-			fmt.Printf("# CPU: %+v\n", &redisInfo.CPU)
-			fmt.Printf("# Cluster: %+v\n", &redisInfo.Cluster)
-			fmt.Printf("# Keyspace: %+v\n", &redisInfo.Keyspace)
+			logger.LogI(packageName, funcName, "# Server:", redisInfo.Server)
+			logger.LogI(packageName, funcName, "# Clients:", &redisInfo.Clients)
+			logger.LogI(packageName, funcName, "# Memory:", &redisInfo.Memory)
+			logger.LogI(packageName, funcName, "# Persistance:", &redisInfo.Persistence)
+			logger.LogI(packageName, funcName, "# Stats:", &redisInfo.Stats)
+			logger.LogI(packageName, funcName, "# Replication:", &redisInfo.Replication)
+			logger.LogI(packageName, funcName, "# CPU:", &redisInfo.CPU)
+			logger.LogI(packageName, funcName, "# Cluster:", &redisInfo.Cluster)
+			logger.LogI(packageName, funcName, "# Keyspace:", &redisInfo.Keyspace)
 
-			logger.LogI(packageName, funcName, "Redis info:", redisInfo.Server)
+			connectedClient := strconv.Itoa(int(redisInfo.Clients.ConnectedClients))
+			usedMmory := strconv.Itoa(int(redisInfo.Memory.UsedMemory))
+			usedMemoryPeak := strconv.Itoa(int(redisInfo.Memory.UsedMemoryPeak))
+			numOfDB := strconv.Itoa(len(redisInfo.Keyspace))
+			totalCommandsProcessed := strconv.Itoa(int(redisInfo.Stats.TotalCommandsProcessed))
+			expiredKeys := strconv.Itoa(int(redisInfo.Stats.ExpiredKeys))
 
+			dataUpdateRedisInfo := map[string]string{
+				"method":                 "updateRedisInfo",
+				"connectedClient":        connectedClient,
+				"usedMmory":              usedMmory,
+				"usedMemoryPeak":         usedMemoryPeak,
+				"totalCommandsProcessed": totalCommandsProcessed,
+				"expiredKeys":            expiredKeys,
+				"numOfDB":                numOfDB,
+			}
+
+			for idx, keyspace := range redisInfo.Keyspace {
+				dbName := "db" + strconv.Itoa(idx)
+				fieldOfKey := dbName + ":key"
+				fieldOfExpires := dbName + ":expires"
+				dataUpdateRedisInfo[fieldOfKey] = strconv.FormatUint(keyspace.Keys, 10)
+				dataUpdateRedisInfo[fieldOfExpires] = strconv.FormatUint(keyspace.Expires, 10)
+			}
+
+			msgUpdateRedisInfo, err := json.Marshal(dataUpdateRedisInfo)
+			if err == nil {
+				rp.broker.Messages <- msgUpdateRedisInfo
+			}
 		}
 	}
+}
+
+func (rp RedisProfiler) RedisLoadTest() {
+	ticker := time.NewTicker(time.Duration(rp.period) * time.Second)
+	for {
+		select {
+		case <-ticker.C:
+			keyName := "TEST" + rp.getMillisTimeFormat(time.Now())
+			//Set
+			rp.redisClient.Set(keyName, "DONE")
+			//Expire
+			rp.redisClient.Expire(keyName, time.Duration(5*time.Minute))
+		}
+	}
+}
+
+// YYYYMMDDhhmmsslll
+func (rp RedisProfiler) getMillisTimeFormat(t time.Time) string {
+	timestamp := t.Format("20060102150405")
+	return timestamp + strconv.Itoa(t.Nanosecond()/1000000)
 }
