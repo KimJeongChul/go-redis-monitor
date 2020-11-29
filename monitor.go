@@ -83,15 +83,19 @@ func main() {
 	redisClient := redis.NewRedisClient(ctx, config.RedisAddr, config.RedisPort, config.RedisPassword, config.RedisDB)
 
 	// Create RedisProfiler
-	redisProfiler := redis.NewRedisProfiler(config.Period, redisClient)
+	redisProfiler := redis.NewRedisProfiler(config.Period, redisClient, broker)
 
 	go redisProfiler.Start()
+
+	// Redis Load Test
+	go redisProfiler.RedisLoadTest()
 
 	// Router
 	router := chi.NewRouter()
 	router.Get("/", dashboard.Web)
 	router.Handle("/js/*", http.StripPrefix("/js/", http.FileServer(http.Dir("static/js"))))
 	router.Handle("/css/*", http.StripPrefix("/css/", http.FileServer(http.Dir("static/css"))))
+	router.Handle("/resource/*", http.StripPrefix("/resource/", http.FileServer(http.Dir("static/resource"))))
 	router.Handle("/listen/", broker)
 
 	// WebServer
