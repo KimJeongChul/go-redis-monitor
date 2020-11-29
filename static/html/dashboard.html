@@ -40,8 +40,10 @@
                         const connectedClient = parsedMsg.connectedClient;
                         const usedMmory = parsedMsg.usedMmory;
                         const usedMemoryPeak = parsedMsg.usedMemoryPeak;
-                        const instantaneousOpsPerSec = parsedMsg.instantaneousOpsPerSec;
-                        const tx = parsedMsg.tx;
+                        const totalCommandsProcessed = parsedMsg.totalCommandsProcessed;
+                        const expiredKeys = parsedMsg.expiredKeys;
+                        const numOfDB = parsedMsg.numOfDB;
+
                         var isExistGraph = false;
 
                         // Connected Client Graph
@@ -71,12 +73,20 @@
 
                         configTotalCommandsProcessedGraph.data.datasets.forEach(function(dataset) {
                             if(dataset.label === "Total Commands Processed"){
-                                dataset.data.push(instantaneousOpsPerSec);
+                                dataset.data.push(totalCommandsProcessed);
                                 if(dataset.data.length > 60){
                                     dataset.data.shift();
                                 }
                             }
+                        })
 
+                        configExpiredKeysGraph.data.datasets.forEach(function(dataset) {
+                            if(dataset.label === "Total Expired Keys"){
+                                dataset.data.push(expiredKeys);
+                                if(dataset.data.length > 60){
+                                    dataset.data.shift();
+                                }
+                            }
                         })
 
                         // Initialize
@@ -104,16 +114,65 @@
                             });
                             configTotalCommandsProcessedGraph.data.datasets.push({
                                 label: "Total Commands Processed",
-                                data: [instantaneousOpsPerSec],
+                                data: [totalCommandsProcessed],
+                                borderColor: "rgb(178, 34, 34)",
+                                fill: false,
+                                lineTension: 0.1
+                            })
+                            configExpiredKeysGraph.data.datasets.push({
+                                label: "Total Expired Keys",
+                                data: [expiredKeys],
                                 borderColor: "rgb(178, 34, 34)",
                                 fill: false,
                                 lineTension: 0.1
                             })
                         }
+
+                        for(idx=0; idx<numOfDB; idx++){
+                            const dbName = "db" + idx;
+                            const key = parsedMsg[dbName+":key"]
+                            const expires = parsedMsg[dbName+":expires"]
+                            configKeysGraph.data.datasets.forEach(function(dataset) {
+                                if(dataset.label === dbName){
+                                    dataset.data.push(key);
+                                    if(dataset.data.length > 60){
+                                        dataset.data.shift();
+                                    }
+                                }
+                            })
+                            configExpiresGraph.data.datasets.forEach(function(dataset) {
+                                if(dataset.label === dbName){
+                                    dataset.data.push(expires);
+                                    if(dataset.data.length > 60){
+                                        dataset.data.shift();
+                                    }
+                                }
+                            })
+
+                            if(!isExistGraph) {
+                                configKeysGraph.data.datasets.push({
+                                    label: dbName,
+                                    data: [key],
+                                    borderColor: "rgb(178, 34, 34)",
+                                    fill: false,
+                                    lineTension: 0.1
+                                })
+                                configExpiresGraph.data.datasets.push({
+                                    label: dbName,
+                                    data: [expires],
+                                    borderColor: "rgb(178, 34, 34)",
+                                    fill: false,
+                                    lineTension: 0.1
+                                })
+                            }
+                            keysChart.update();
+                            expiresChart.update();
+                        }
                         
                         connectedClientChart.update();
                         resourceMemoryChart.update();
                         totalCommandsProcessedChart.update();
+                        expiredKeysChart.update();
                     }
                     break;
             }
@@ -139,7 +198,7 @@
                 <div>
                     <div class="row">
                         <!-- Connected Client Graph -->
-                        <div class="col-md-6 ">
+                        <div class="col-md-4 ">
                             <div class="box box-">
                                 <div class="box-body" style="overflow-x: scroll;overflow-y: hidden;">
                                     <div class="row">
@@ -171,7 +230,7 @@
                             </div>
                         </div>
                         <!-- Memory Graph -->
-                        <div class="col-md-6 ">
+                        <div class="col-md-4">
                             <div class="box box-">
                                 <div class="box-body" style="overflow-x: scroll;overflow-y: hidden;">
                                     <div class="row">
@@ -201,10 +260,8 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
-                     <div class="row">
                         <!-- Total Commands Processed graph -->
-                        <div class="col-md-6 ">
+                        <div class="col-md-4">
                             <div class="box box-">
                                 <div class="box-body" style="overflow-x: scroll;overflow-y: hidden;">
                                     <div class="row">
@@ -235,30 +292,94 @@
                                 </div>
                             </div>
                         </div>
-                        <!-- 전체 노드별 메모리 자원 사용량 그래프 -->
-                        <div class="col-md-6 ">
+                    </div>
+                     <div class="row">
+                        <!-- Keys -->
+                        <div class="col-md-4">
                             <div class="box box-">
                                 <div class="box-body" style="overflow-x: scroll;overflow-y: hidden;">
                                     <div class="row">
                                         <div class="col-md-12">
                                             <p class="text-center">
-                                                <strong id="reportTitle">Network Resource usages graph (Recent 10 minutes)</strong>
+                                                <strong id="reportTitle">Keys graph (Recent 10 minutes)</strong>
                                             </p>
                                             <div class="chart">
-                                                <canvas id="resourceNetworkGraph"></canvas>
+                                                <canvas id="keysGraph"></canvas>
                                             </div>
                                             <script>
-                                                var ctxResourceNetworkGraph = document.getElementById('resourceNetworkGraph').getContext('2d');
-                                                var configResourceNetworkGraph = {
+                                                var ctxKeysGraph = document.getElementById('keysGraph').getContext('2d');
+                                                var configKeysGraph = {
                                                     type: "line",
                                                     data: {
                                                         labels: labelTimes,
                                                         datasets: []
                                                     }
                                                 };
-                                                var resourceNetworkChart = new Chart(ctxResourceNetworkGraph, configResourceNetworkGraph);                                                 
+                                                var keysChart = new Chart(ctxKeysGraph, configKeysGraph);                                                 
                                                 setInterval(function() {
-                                                    resourceNetworkChart.update();
+                                                    keysChart.update();
+                                                }, 1000);
+                                            </script>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Expires -->
+                        <div class="col-md-4">
+                            <div class="box box-">
+                                <div class="box-body" style="overflow-x: scroll;overflow-y: hidden;">
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <p class="text-center">
+                                                <strong id="reportTitle">Expires Graph (Recent 10 minutes)</strong>
+                                            </p>
+                                            <div class="chart">
+                                                <canvas id="expiresGraph"></canvas>
+                                            </div>
+                                            <script>
+                                                var ctxExpiresGraph = document.getElementById('expiresGraph').getContext('2d');
+                                                var configExpiresGraph = {
+                                                    type: "line",
+                                                    data: {
+                                                        labels: labelTimes,
+                                                        datasets: []
+                                                    }
+                                                };
+                                                var expiresChart = new Chart(ctxExpiresGraph, configExpiresGraph);                                                 
+                                                setInterval(function() {
+                                                    expiresChart.update();
+                                                }, 1000);
+                                            </script>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Expired Keys -->
+                        <div class="col-md-4">
+                            <div class="box box-">
+                                <div class="box-body" style="overflow-x: scroll;overflow-y: hidden;">
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <p class="text-center">
+                                                <strong id="reportTitle">Expired Keys (Recent 10 minutes)</strong>
+                                            </p>
+                                            <div class="chart">
+                                                <canvas id="expiredKeys"></canvas>
+                                            </div>
+                                            <script>
+                                                var ctxExpiredKeysGraph = document.getElementById('expiredKeys').getContext('2d');
+                                                var configExpiredKeysGraph = {
+                                                    type: "line",
+                                                    data: {
+                                                        labels: labelTimes,
+                                                        datasets: []
+                                                    }
+                                                };
+                                                var expiredKeysChart = new Chart(ctxExpiredKeysGraph, configExpiredKeysGraph);                                                 
+                                                setInterval(function() {
+                                                    expiredKeysChart.update();
                                                 }, 1000);
                                             </script>
                                         </div>
