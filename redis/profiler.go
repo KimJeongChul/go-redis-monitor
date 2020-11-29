@@ -93,7 +93,7 @@ func (rp RedisProfiler) Start() {
 }
 
 func (rp RedisProfiler) RedisLoadTest() {
-	ticker := time.NewTicker(time.Duration(rp.period) * time.Second)
+	ticker := time.NewTicker(time.Duration(5) * time.Second)
 	for {
 		select {
 		case <-ticker.C:
